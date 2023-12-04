@@ -150,7 +150,7 @@ clip_image_batch_preprocess.argtypes = [
     ctypes.POINTER(ClipImageU8Batch),
     ctypes.POINTER(ClipImageF32Batch),
 ]
-clip_image_batch_preprocess.restype = ctypes.c_bool
+clip_image_batch_preprocess.restype = ctypes.c_void_p
 
 clip_text_encode = clip_lib.clip_text_encode
 clip_text_encode.argtypes = [
@@ -213,10 +213,11 @@ softmax_with_sorting.restype = ctypes.c_bool
 
 clip_image_batch_encode = clip_lib.clip_image_batch_encode
 clip_image_batch_encode.argtypes = [
-    ctypes.POINTER(ctypes.c_void_p),
+    ctypes.POINTER(ClipContext),
     ctypes.c_int,
-    ctypes.POINTER(ClipImageF32),
+    ctypes.POINTER(ClipImageF32Batch),
     ctypes.POINTER(ctypes.c_float),
+    ctypes.c_bool,
 ]
 clip_image_batch_encode.restype = ctypes.c_bool
 
@@ -421,10 +422,13 @@ class Clip:
         Takes Single image file path process it and generate the corresponding embeddings.
         """
         processed_image_ptr = make_clip_image_f32_batch()
-        if not clip_image_batch_preprocess(self.ctx, n_threads, image_ptr, processed_image_ptr):
+        try:
+            # clip_image_batch_preprocess is a void function in clip.cpp.  do not use if not.
+            clip_image_batch_preprocess(self.ctx, n_threads, image_ptr, processed_image_ptr)
+        except:
             raise RuntimeError("Could not preprocess image")
 
-        img_vec = (ctypes.c_float * self.vec_dim * image_ptr.size)() 
+        img_vec = (ctypes.c_float * (self.vec_dim * image_ptr.size))() 
         if not clip_image_batch_encode(
             self.ctx, n_threads, processed_image_ptr, img_vec, normalize
         ):

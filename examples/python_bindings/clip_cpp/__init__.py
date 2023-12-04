@@ -1,4 +1,4 @@
-from clip_cpp import (
+from .clip import (
     Clip, 
     make_clip_image_u8, 
     make_clip_image_f32, 
