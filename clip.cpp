@@ -679,8 +679,9 @@ bool clip_tokenize(const clip_ctx * ctx, const char * text, struct clip_tokens *
 }
 
 clip_image_u8 * make_clip_image_u8() { return new clip_image_u8(); }
-
 clip_image_f32 * make_clip_image_f32() { return new clip_image_f32(); }
+clip_image_u8_batch * make_clip_image_u8_batch() { return new clip_image_u8_batch(); }
+clip_image_f32_batch * make_clip_image_f32_batch() { return new clip_image_f32_batch(); }
 
 bool clip_image_load_from_file(const char * fname, clip_image_u8 * img) {
     int nx, ny, nc;
@@ -795,6 +796,7 @@ void * preprocess_image(void * arg) {
 void clip_image_batch_preprocess(const clip_ctx * ctx, const int n_threads, const clip_image_u8_batch * img_inputs,
                                  clip_image_f32_batch * imgs_resized) {
     imgs_resized->size = img_inputs->size;
+    imgs_resized->data = new clip_image_f32[img_inputs->size];
 
     int num_threads = std::min(n_threads, static_cast<int>(img_inputs->size));
     int i, t;
@@ -1115,9 +1117,9 @@ bool clip_image_batch_encode(const clip_ctx * ctx, const int n_threads, const cl
     {
         float * data = (float *)ggml_get_data(inp_raw);
 
-        for (int b = 0; b < imgs->size; b++) {
-            const int nx = imgs->data[b].nx;
-            const int ny = imgs->data[b].ny;
+        for (size_t i = 0; i < imgs->size; i++) {
+            const int nx = imgs->data[i].nx;
+            const int ny = imgs->data[i].ny;
             GGML_ASSERT(nx == image_size && ny == image_size);
 
             const int n = nx * ny;

@@ -94,6 +94,18 @@ class ClipImageF32(ctypes.Structure):
         ("data", ctypes.POINTER(ctypes.c_float)),
     ]
 
+class ClipImageU8Batch(ctypes.Structure):
+    _fields_ = [
+        ("size", ctypes.c_size_t),
+        ("data", ctypes.POINTER(ClipImageU8)),
+    ]
+
+
+class ClipImageF32Batch(ctypes.Structure):
+    _fields_ = [
+        ("size", ctypes.c_size_t),
+        ("data", ctypes.POINTER(ClipImageF32)),
+    ]
 
 class ClipContext(ctypes.Structure):
     pass
@@ -130,6 +142,15 @@ clip_image_preprocess.argtypes = [
     ctypes.POINTER(ClipImageF32),
 ]
 clip_image_preprocess.restype = ctypes.c_bool
+
+clip_image_batch_preprocess = clip_lib.clip_image_batch_preprocess
+clip_image_batch_preprocess.argtypes = [
+    ctypes.POINTER(ClipContext),
+    ctypes.c_int,
+    ctypes.POINTER(ClipImageU8Batch),
+    ctypes.POINTER(ClipImageF32Batch),
+]
+clip_image_batch_preprocess.restype = ctypes.c_bool
 
 clip_text_encode = clip_lib.clip_text_encode
 clip_text_encode.argtypes = [
@@ -190,14 +211,14 @@ softmax_with_sorting.argtypes = [
 ]
 softmax_with_sorting.restype = ctypes.c_bool
 
-# clip_image_batch_encode = clip_lib.clip_image_batch_encode
-# clip_image_batch_encode.argtypes = [
-#     ctypes.POINTER(ctypes.c_void_p),
-#     ctypes.c_int,
-#     ctypes.POINTER(ClipImageF32),
-#     ctypes.POINTER(ctypes.c_float),
-# ]
-# clip_image_batch_encode.restype = ctypes.c_bool
+clip_image_batch_encode = clip_lib.clip_image_batch_encode
+clip_image_batch_encode.argtypes = [
+    ctypes.POINTER(ctypes.c_void_p),
+    ctypes.c_int,
+    ctypes.POINTER(ClipImageF32),
+    ctypes.POINTER(ctypes.c_float),
+]
+clip_image_batch_encode.restype = ctypes.c_bool
 
 make_clip_image_u8 = clip_lib.make_clip_image_u8
 make_clip_image_u8.argtypes = []
@@ -206,6 +227,14 @@ make_clip_image_u8.restype = ctypes.POINTER(ClipImageU8)
 make_clip_image_f32 = clip_lib.make_clip_image_f32
 make_clip_image_f32.argtypes = []
 make_clip_image_f32.restype = ctypes.POINTER(ClipImageF32)
+
+make_clip_image_u8_batch = clip_lib.make_clip_image_u8_batch
+make_clip_image_u8_batch.argtypes = []
+make_clip_image_u8_batch.restype = ctypes.POINTER(ClipImageU8Batch)
+
+make_clip_image_f32_batch = clip_lib.make_clip_image_f32_batch
+make_clip_image_f32_batch.argtypes = []
+make_clip_image_f32_batch.restype = ctypes.POINTER(ClipImageF32Batch)
 
 
 def _struct_to_dict(struct):
@@ -366,6 +395,42 @@ class Clip:
             raise RuntimeError("Could not encode image")
 
         return [img_vec[i] for i in range(self.vec_dim)]
+
+    def preprocess_encode_image(
+        self, image_ptr: ClipImageU8, n_threads: int = os.cpu_count(), normalize: bool = True
+    ) -> List[float]:
+        """
+        Takes Single image file path process it and generate the corresponding embeddings.
+        """
+        processed_image_ptr = make_clip_image_f32()
+        if not clip_image_preprocess(self.ctx, image_ptr, processed_image_ptr):
+            raise RuntimeError("Could not preprocess image")
+
+        img_vec = (ctypes.c_float * self.vec_dim)()
+        if not clip_image_encode(
+            self.ctx, n_threads, processed_image_ptr, img_vec, normalize
+        ):
+            raise RuntimeError("Could not encode image")
+
+        return [img_vec[i] for i in range(self.vec_dim)]
+
+    def preprocess_encode_image_batch(
+        self, image_ptr: ClipImageU8Batch, n_threads: int = os.cpu_count(), normalize: bool = True
+    ) -> List[List[float]]:
+        """
+        Takes Single image file path process it and generate the corresponding embeddings.
+        """
+        processed_image_ptr = make_clip_image_f32_batch()
+        if not clip_image_batch_preprocess(self.ctx, n_threads, image_ptr, processed_image_ptr):
+            raise RuntimeError("Could not preprocess image")
+
+        img_vec = (ctypes.c_float * self.vec_dim * image_ptr.size)() 
+        if not clip_image_batch_encode(
+            self.ctx, n_threads, processed_image_ptr, img_vec, normalize
+        ):
+            raise RuntimeError("Could not encode image")
+
+        return [[img_vec[i + j*self.vec_dim] for i in range(self.vec_dim)] for j in range(image_ptr.size) ]
 
     def calculate_similarity(
         self, text_embedding: List[float], image_embedding: List[float]
